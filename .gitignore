@@ -1,0 +1,21 @@
+# Add comments for clarity. Comments start with a hash (#) symbol.
+# This is a comment!
+ 
+# Ignore files with specific names.
+Thumbs.db
+.DS_Store
+ 
+# Ignore files with specific extensions. The * is a wildcard that matches
+# any characters.
+*.log
+*.tmp
+*.bak
+*.jpg
+*.mp4
+ 
+# Ignore directories. The trailing slash is not required, but it more clearly
+# indicates a directory to the reader.
+app/snapshot/
+!app/snapshot/gitkeep
+app/videos/
+!app/videos/gitkeep

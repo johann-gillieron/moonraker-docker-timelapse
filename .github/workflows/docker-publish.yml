@@ -6,6 +6,7 @@ on:
     tags: [ 'v*' ]
 
 jobs:
+  permissions: write-all
   push_to_registry:
     name: Build and Push Multi-Arch Image
     runs-on: ubuntu-latest
