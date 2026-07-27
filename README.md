@@ -1,7 +1,7 @@
 # Moonraker-docker-Timelapse
 
 **Important Requirement:**  
-This tool requires a printer running [Moonraker](https://moonraker.readthedocs.io/en/latest/) to function on a Klipper printer.
+This tool requires a printer running [Moonraker](https://moonraker.readthedocs.io/en/latest/) to work with a Klipper printer.
 
 **Based on:**  
 [Rinkhals-Timelapse by aenima1337](https://github.com/aenima1337/rinkhals-timelapse).  
@@ -67,9 +67,9 @@ Modify `printers.json` or use the admin page — printers are reloaded **without
 For each printer, the following directories are created automatically:
 
 ```
-snapshots_<printer_id>/
-videos_<printer_id>/
-videos_<printer_id>/thumbs/
+snapshots/<printer_id>/
+videos/<printer_id>/
+videos/<printer_id>/thumbs/
 config/
 ```
 
