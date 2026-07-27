@@ -12,6 +12,7 @@ Thumbs.db
 *.bak
 *.jpg
 *.mp4
+printers.json
  
 # Ignore directories. The trailing slash is not required, but it more clearly
 # indicates a directory to the reader.

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+<link rel="icon" sizes="512x512" href="{{ url_for('static', filename='icon.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icon.png') }}">
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Printer</title>
+    <style>
+        body { background:#0f1116; color:#e2e8f0; font-family:sans-serif; padding:20px; }
+        .card { background:#1a1d23; padding:20px; border-radius:10px; border:1px solid #2d3748; }
+        input, select { width:100%; padding:8px; background:#0f1116; border:1px solid #2d3748; color:white; border-radius:4px; }
+        .btn { background:#3b82f6; padding:10px; border:none; border-radius:4px; color:white; cursor:pointer; }
+    </style>
+</head>
+<body>
+
+<h1>Edit Printer {{p.id}}</h1>
+
+<div class="card">
+    <form action="/admin/edit/{{p.id}}" method="POST">
+        <label>Name</label>
+        <input name="name" value="{{p.name}}">
+
+        <label>IP</label>
+        <input name="ip" value="{{p.ip}}">
+
+        <label>Mode</label>
+        <select name="mode">
+            <option value="layer" {% if p.mode=='layer' %}selected{% endif %}>Layer</option>
+            <option value="time" {% if p.mode=='time' %}selected{% endif %}>Smart Time</option>
+        </select>
+
+        <button class="btn" style="margin-top:10px;">Save</button>
+    </form>
+</div>
+
+</body>
+</html>

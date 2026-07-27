@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+<link rel="icon" sizes="512x512" href="{{ url_for('static', filename='icon.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icon.png') }}">
+<head>
+    <meta charset="UTF-8">
+    <title>Printer Administration</title>
+    <style>
+        body { background:#0f1116; color:#e2e8f0; font-family:sans-serif; padding:20px; }
+        .card { background:#1a1d23; padding:20px; border-radius:10px; border:1px solid #2d3748; margin-bottom:20px; }
+        input, select { width:100%; padding:8px; background:#0f1116; border:1px solid #2d3748; color:white; border-radius:4px; }
+        .btn { background:#3b82f6; padding:10px; border:none; border-radius:4px; color:white; cursor:pointer; }
+        .btn-danger { background:#ef4444; }
+        table { width:100%; border-collapse:collapse; margin-top:20px; }
+        th, td { padding:10px; border-bottom:1px solid #2d3748; }
+        a { color:#3b82f6; text-decoration:none; }
+    </style>
+</head>
+<body>
+
+<h1>Printer Administration</h1>
+
+<div class="card">
+    <h2>Add Printer</h2>
+    <form action="/admin/add" method="POST">
+        <label>ID</label>
+        <input name="id" required>
+
+        <label>Name</label>
+        <input name="name" required>
+
+        <label>IP</label>
+        <input name="ip" required>
+
+        <label>Mode</label>
+        <select name="mode">
+            <option value="layer">Layer</option>
+            <option value="time">Smart Time</option>
+        </select>
+
+        <button class="btn" style="margin-top:10px;">Add Printer</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Existing Printers</h2>
+    <table>
+        <tr><th>ID</th><th>Name</th><th>IP</th><th>Mode</th><th>Actions</th></tr>
+        {% for p in printers %}
+        <tr>
+            <td>{{p.id}}</td>
+            <td>{{p.name}}</td>
+            <td>{{p.ip}}</td>
+            <td>{{p.mode}}</td>
+            <td>
+                <a href="/admin/edit/{{p.id}}">Edit</a> |
+                <a href="/admin/delete/{{p.id}}" onclick="return confirm('Delete printer?')">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+<a href="/admin/reload" class="btn">Reload Printers</a>
+</body>
+</html>

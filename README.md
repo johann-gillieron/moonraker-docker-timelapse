@@ -50,7 +50,7 @@ This revised version adds **full multi‑printer support**, making it ideal for 
 Accessible at:
 
 ```
-http://[YOUR_DOCKER_HOST_IP]:5005/admin
+http://[YOUR_DOCKER_HOST_IP]:5115/admin
 ```
 
 Includes:
@@ -63,8 +63,12 @@ Includes:
 ### 🔄 Dynamic Printer Reloading
 Modify `printers.json` or use the admin page — printers are reloaded **without restarting the container**.
 
-### 📁 Automatic Directory Creation (Self‑Healing)
-For each printer, the following directories are created automatically:
+## 📁 Automatic Directory Creation (Self‑Healing)
+
+Moonraker‑docker‑Timelapse automatically creates and maintains a clean directory structure for each printer.  
+If any folder is missing, corrupted, or deleted manually, the service will **recreate it on startup or during dynamic reload**, ensuring the system remains stable and functional.
+
+### Directory structure per printer
 
 ```
 snapshots/<printer_id>/
@@ -73,7 +77,20 @@ videos/<printer_id>/thumbs/
 config/
 ```
 
-If folders are missing or deleted, they are recreated automatically.
+### 🔒 Persistence in Docker
+
+Inside a Docker container, files are **not persistent** unless you explicitly mount them.  
+To ensure your snapshots and videos survive container restarts, you must map the directories to existing host folders:
+
+```yaml
+volumes:
+  - ./config:/app/config
+  - ./snapshots:/app/snapshots
+  - ./videos:/app/videos
+```
+
+This makes the automatically created folders **persistent**, because they are stored on your host machine rather than inside the ephemeral container filesystem.
+
 
 ### 🧩 Multi‑Architecture Support
 Compatible with:
@@ -110,7 +127,7 @@ docker compose up -d
 4. Access the interface:
 
 ```
-http://[YOUR_DOCKER_HOST_IP]:5005
+http://[YOUR_DOCKER_HOST_IP]:5115
 ```
 
 5. Configure your printers via the **Admin Page** or by editing `printers.json`.
@@ -136,8 +153,6 @@ Fetches metadata from the G-code file:
 ## 📄 License and Credits
 
 - **Author:** Johann Gillieron  
-- **Based on:**  
-  [Rinkhals-Timelapse](https://github.com/aenima1337/rinkhals-timelapse) by aenima1337  
+- **Based on:** [Rinkhals-Timelapse](https://github.com/aenima1337/rinkhals-timelapse) by aenima1337  
 - **License:** MIT  
-- **Acknowledgments:**  
-  Special thanks to aenima1337 for the original Rinkhals-Timelapse project.
+- **Acknowledgments:**  Special thanks to aenima1337 for the original Rinkhals-Timelapse project.
