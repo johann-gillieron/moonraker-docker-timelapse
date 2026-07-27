@@ -186,9 +186,9 @@ def render_video(printer, job_name="manual_render"):
     except Exception as e:
         printer.log(f"Render Error: {e}")
 
-def get_smart_interval(filename):
+def get_smart_interval(ip, filename):
     try:
-        url = f"http://{config['printer_ip']}/server/files/metadata?filename={filename}"
+        url = f"http://{ip}/server/files/metadata?filename={filename}"
         r = requests.get(url, timeout=2)
         meta = r.json()
         estimated_time = meta['result'].get('estimated_time', 0)
