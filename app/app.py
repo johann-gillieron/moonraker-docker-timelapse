@@ -8,7 +8,7 @@ calculates ideal intervals for perfect 15s timelapses.
 """
 VERSION = "1.0"
 
-import requests, time, os, threading, subprocess, json, glob, re
+import requests, time, os, threading, subprocess, json, glob, re, numbers
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify
 from collections import deque
 from pathlib import Path
@@ -40,18 +40,25 @@ class Printer:
         # Check if folders exists
         self.ensure_printer_dirs()
 
-        # États internes
+        # Internal State
         self.is_printing = False
         self.last_layer = -1
         self.progress = 0
         self.time_left = "Unknown"
-        self.interval = 0
+        self.actual_layer = 0
+        self.smart_capture_interval = 0
         self.last_snap_time = 0
         self.last_image_ts = 0
         self.logs = deque(maxlen=10)
         self.job_filename = ""
+        self.job_file_size = 0
+        self.job_slicer_estimate_time = 0
+        self.job_filament_total = 0
+        self.job_layer_count = 0
+        self.job_first_layer_height = 0
+        self.job_layer_height = 0
 
-        # Thread de monitoring
+        # Monitoring thread
         threading.Thread(target=self.monitor_loop, daemon=True).start()
 
     def ensure_printer_dirs(self):
@@ -67,29 +74,37 @@ class Printer:
         while True:
             try:
                 r = requests.get(
-                    f"http://{self.ip}:7125/printer/objects/query?virtual_sdcard&print_stats",
+                    f"http://{self.ip}/printer/objects/query?virtual_sdcard&print_stats&toolhead&extruder",
                     timeout=3
                 ).json()
 
                 stats = r["result"]["status"]
                 state = stats["print_stats"]["state"]
                 filename = stats["print_stats"]["filename"]
+                current_layer = stats["print_stats"]["info"].get("current_layer", "None")
+                filament_used = stats["print_stats"].get("filament_used", 0)
                 is_active = stats["virtual_sdcard"].get("is_active", False)
-                current_layer = stats["virtual_sdcard"].get("current_layer", 0)
+                file_position = stats["virtual_sdcard"].get("file_position", 0)
+                print_duration = stats["virtual_sdcard"].get("total_duration", 0)
                 self.progress = int(stats["virtual_sdcard"].get("progress", 0) * 100)
-                self.time_left = int(stats["virtual_sdcard"].get("remain_time", "Unknown"))
+                actual_height = stats["toolhead"].get("position")[2]
+                self.time_left = self.compute_estimed_time_left(file_position, filament_used, print_duration)
+
+                if not (isinstance(current_layer, numbers.Number)):
+                    current_layer = self.compute_actual_layer(actual_height)
+                    #print(current_layer) #uncomment for debug
 
                 # Start print detection
                 if state == "printing" and is_active and not self.is_printing:
                     self.is_printing = True
                     self.job_filename = filename
                     self.log("Print started.")
+                    self.extract_metadata_from_job_file()
 
                     if self.mode == "time":
-                        self.get_smart_interval
-                        self.log(f"Smart Mode: {self.interval}s")
+                        self.log(f"Smart Mode: {self.smart_capture_interval}s")
                     else:
-                        self.interval = 0
+                        self.smart_capture_interval = 0
 
                 if self.is_printing:
                     # End print detection
@@ -113,7 +128,7 @@ class Printer:
 
                     elif self.mode == "time":
                         now = time.time()
-                        if (now - self.last_snap_time) > self.interval:
+                        if (now - self.last_snap_time) > self.smart_capture_interval:
                             take_snap = True
                             self.last_snap_time = now
 
@@ -175,20 +190,46 @@ class Printer:
 
         except Exception as e:
             self.log(f"Render Error: {e}")
-            
-    def get_smart_interval(self):
-        estimated_time = 0
+
+    def extract_metadata_from_job_file(self):
         try:
-            url = f"http://{self.ip}/server/files/metadata?filename={self.job_filename}"
-            r = requests.get(url, timeout=2)
-            meta = r.json()
-            estimated_time = meta['result'].get('estimated_time', 0)
-        except: pass
-        if estimated_time > 0:
-            calc = max(5, min(estimated_time / 450, 60))
-            self.interval = int(calc)
+            meta = requests.get(
+                f"http://{self.ip}/server/files/metadata?filename={self.job_filename}",
+                timeout=3
+            ).json()
+            self.job_file_size = meta['result'].get('size', 0)
+            self.job_slicer_estimate_time = meta['result'].get('estimated_time', 0)
+            self.job_filament_total = meta['result'].get('filament_total', 0)
+            self.job_layer_count = meta['result'].get('layer_count', 0)
+            self.job_first_layer_height = meta['result'].get('first_layer_height', 0)
+            self.job_layer_height = meta['result'].get('layer_height', 0)
+            #print("metadata extraction", json.dumps(meta, indent=4)) #uncomment for debug
+        
+        except Exception as e:
+            self.log(f"Error: {e}")
+
+        # compute the smart capture interval time
+        if self.job_slicer_estimate_time > 0:
+            calc = max(5, min(self.job_slicer_estimate_time / 450, 60))
+            self.smart_capture_interval = int(calc)
         else:
-            self.interval = 15
+            self.smart_capture_interval = 15
+
+    def compute_actual_layer(self, actual_height):
+        #print("compute_actual_layer ", actual_height, self.job_first_layer_height, self.job_layer_height)
+        if(self.job_layer_height != 0):
+            return int(round((actual_height - self.job_first_layer_height) / self.job_layer_height, 0))
+        return 0
+
+    def compute_estimed_time_left(self, file_position, filament_used, print_duration):
+        #print("compute_estimed_time_left ", file_position, self.job_file_size, filament_used, self.job_filament_total, print_duration)
+        if not ((self.job_filament_total == 0) or (self.job_file_size == 0)):
+            filament_percent = (1.0 * filament_used) / self.job_filament_total
+            file_percent = (1.0 * file_position) / self.job_file_size
+            estimate_percent = (filament_percent + file_percent) / 2
+            return (print_duration / estimate_percent) - print_duration
+        return "unknow"
+
 
 def check_and_init_printer_config():
     path = Path(f"{CONFIG_DIR}/{CONFIG_FILE}")
@@ -275,7 +316,7 @@ def status_api(pid):
         "img_ts": p.last_image_ts,
         "video_count": video_count,
         "mode": p.mode,
-        "interval": p.interval,
+        "interval": p.smart_capture_interval,
         "remaining": p.time_left
     })
 

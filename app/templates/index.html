@@ -64,6 +64,9 @@
                 {{p.name}}
             </div>
         {% endfor %}
+        <div style="display:flex; justify-content:flex-end; margin-bottom:15px;">
+            <a href="/admin" class="btn" style="text-decoration:none;">ADMIN</a>
+        </div>
     </div>
 
     <!-- ===================== DASHBOARD PER PRINTER ===================== -->
@@ -94,6 +97,10 @@
 
                     <div class="progress-bar">
                         <div id="progress-fill-{{p.id}}" class="progress-fill"></div>
+                    </div>
+                    <div class="info-row">
+                        <span>Time Left</span>
+                        <span class="val" id="remaining-{{p.id}}">--</span>
                     </div>
 
                     <div id="smart-info-{{p.id}}" class="info-row"
@@ -158,6 +165,12 @@
             </div>
         </div>
     </div>
+    
+    <!-- ===================== FOOTER ===================== -->
+    <div style="text-align: center; padding: 20px; font-size: 10px; color: #64748b;">
+        <strong>Moonraker Docker Timelapse v{{ version }} | Created by johann-gillieron</strong> | 
+        <a href="https://github.com/johann-gillieron/moonraker-docker-timelapse" target="_blank" style="color: #64748b;">GitHub</a>
+    </div>
 
     <!-- ===================== JAVASCRIPT ===================== -->
     <script>
@@ -194,6 +207,8 @@
 
                     document.getElementById('cam-img-' + pid).src =
                         '/last_snap/' + pid + '?t=' + data.img_ts;
+                    document.getElementById('remaining-' + pid).innerText =
+                        formatTime(data.remaining);
                 });
         }
 
@@ -214,10 +229,19 @@
             document.getElementById('player').pause();
         }
 
+        function formatTime(seconds) {
+            if (!seconds || seconds < 0) return "--";
+
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+
+            const hh = h.toString().padStart(2, '0');
+            const mm = m.toString().padStart(2, '0');
+            const ss = s.toString().padStart(2, '0');
+
+            return `${hh}:${mm}:${ss}`;
+        }
     </script>
-    <div style="text-align: center; padding: 20px; font-size: 10px; color: #64748b;">
-        <strong>Moonraker Docker Timelapse v{{ version }} | Created by johann-gillieron</strong> | 
-        <a href="https://github.com/johann-gillieron/moonraker-docker-timelapse" target="_blank" style="color: #64748b;">GitHub</a>
-    </div>
 </body>
 </html>
