@@ -216,14 +216,9 @@
         setInterval(() => {
             {% for p in printers %}
                 updateStatus('{{p.id}}');
+                updateLiveSnapshot("{{p.id}}");
             {% endfor %}
         }, 2000);
-
-        setInterval(() => {
-            {% for p in printers %}
-                updateLiveSnapshot("{{p.id}}", "{{p.ip}}");
-            {% endfor %}
-        }, 5000);
 
         function openVid(pid, file) {
             document.getElementById('player').src = '/video_file/' + pid + '/' + file;
@@ -259,12 +254,12 @@
             return `${hh}:${mm}:${ss}`;
         }
 
-        function updateLiveSnapshot(pid, ip) {
+        function updateLiveSnapshot(pid) {
             const img = document.getElementById("live-" + pid);
             if (!img) return;
 
-            // Ajout d'un timestamp pour éviter le cache navigateur
-            img.src = `http://${ip}/webcam/?action=snapshot&t=${Date.now()}`;
+            // Add a timestamp to avoid the browser cache
+            img.src = `/live_snap/${pid}?t=${Date.now()}`;
         }
     </script>
 </body>

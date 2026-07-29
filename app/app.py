@@ -8,7 +8,7 @@ Description: Automatically detects print status via Moonraker API and calculates
 VERSION = "2.4"
 
 import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
-from flask import Flask, render_template, send_from_directory, request, redirect, jsonify
+from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response
 from collections import deque
 from pathlib import Path
 
@@ -397,10 +397,18 @@ def last_snap(pid):
 
     return redirect("https://via.placeholder.com/320x180/1a1d23/3b82f6?text=Ready")
 
-@app.route('/actual_snap/<pid>')
-def actual_snap(pid):
+@app.route('/live_snap/<pid>')
+def live_snap(pid):
     p = PRINTERS[pid]
-    return redirect(f"http://{p.ip}/webcam/?action=snapshot")
+    url = f"http://{p.ip}/webcam/?action=snapshot"
+    try:
+        r = requests.get(url, timeout=3)
+        if r.status_code != 200:
+            raise Exception()
+        return Response(r.content, mimetype="image/jpeg")
+    except Exception:
+        with open("static/no_cam.png", "rb") as f:
+            return Response(f.read(), mimetype="image/png")
 
 @app.route('/thumb/<pid>/<path:filename>')
 def thumb(pid, filename):
