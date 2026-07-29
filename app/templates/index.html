@@ -87,7 +87,7 @@
                     </div>
 
                     <div class="img-container">
-                        <img id="cam-img-{{p.id}}" src="/last_snap/{{p.id}}" class="preview-img">
+                        <img id="live-{{p.id}}" src="" style="width:100%; border-radius:8px;">
                     </div>
 
                     <div class="info-row">
@@ -213,9 +213,17 @@
         }
 
         // Update for each printer
-        {% for p in printers %}
-            setInterval(() => updateStatus('{{p.id}}'), 2000);
-        {% endfor %}
+        setInterval(() => {
+            {% for p in printers %}
+                updateStatus('{{p.id}}');
+            {% endfor %}
+        }, 2000);
+
+        setInterval(() => {
+            {% for p in printers %}
+                updateLiveSnapshot("{{p.id}}", "{{p.ip}}");
+            {% endfor %}
+        }, 5000);
 
         function openVid(pid, file) {
             document.getElementById('player').src = '/video_file/' + pid + '/' + file;
@@ -249,6 +257,14 @@
             const ss = s.toString().padStart(2, '0');
 
             return `${hh}:${mm}:${ss}`;
+        }
+
+        function updateLiveSnapshot(pid, ip) {
+            const img = document.getElementById("live-" + pid);
+            if (!img) return;
+
+            // Ajout d'un timestamp pour éviter le cache navigateur
+            img.src = `http://${ip}/webcam/?action=snapshot&t=${Date.now()}`;
         }
     </script>
 </body>
