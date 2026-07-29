@@ -19,13 +19,13 @@
 
 <div class="card">
     <form action="/admin/edit/{{p.id}}" method="POST">
-        <label>Name</label>
+        <label>Name (Brand with model)</label>
         <input name="name" value="{{p.name}}">
 
-        <label>IP</label>
+        <label>IP (or local address)</label>
         <input name="ip" value="{{p.ip}}">
 
-        <label>Mode</label>
+        <label>Timelapse mode</label>
         <select name="mode">
             <option value="layer" {% if p.mode=='layer' %}selected{% endif %}>Layer</option>
             <option value="time" {% if p.mode=='time' %}selected{% endif %}>Smart Time</option>

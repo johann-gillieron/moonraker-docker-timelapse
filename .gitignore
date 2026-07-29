@@ -16,7 +16,7 @@ printers.json
  
 # Ignore directories. The trailing slash is not required, but it more clearly
 # indicates a directory to the reader.
-app/snapshot/
-!app/snapshot/gitkeep
+app/snapshots/
+!app/snapshots/gitkeep
 app/videos/
 !app/videos/gitkeep

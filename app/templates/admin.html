@@ -13,7 +13,7 @@
         .btn { background:#3b82f6; padding:10px; border:none; border-radius:4px; color:white; cursor:pointer; }
         .btn-danger { background:#ef4444; }
         table { width:100%; border-collapse:collapse; margin-top:20px; }
-        th, td { padding:10px; border-bottom:1px solid #2d3748; }
+        th, td { padding:10px; border-bottom:1px solid #2d3748; text-align: left; }
         a { color:#3b82f6; text-decoration:none; }
     </style>
 </head>
@@ -24,16 +24,16 @@
 <div class="card">
     <h2>Add Printer</h2>
     <form action="/admin/add" method="POST">
-        <label>ID</label>
+        <label>ID (Unique name to recognize the printer)</label>
         <input name="id" required>
 
-        <label>Name</label>
+        <label>Name (Brand with model)</label>
         <input name="name" required>
 
-        <label>IP</label>
+        <label>IP (or local address)</label>
         <input name="ip" required>
 
-        <label>Mode</label>
+        <label>Timelapse mode</label>
         <select name="mode">
             <option value="layer">Layer</option>
             <option value="time">Smart Time</option>
@@ -46,7 +46,7 @@
 <div class="card">
     <h2>Existing Printers</h2>
     <table>
-        <tr><th>ID</th><th>Name</th><th>IP</th><th>Mode</th><th>Actions</th></tr>
+        <tr><th>ID</th><th>Name</th><th>IP</th><th>Timelapse mode</th><th>Actions</th></tr>
         {% for p in printers %}
         <tr>
             <td>{{p.id}}</td>
