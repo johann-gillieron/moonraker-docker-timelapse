@@ -8,7 +8,7 @@ calculates ideal intervals for perfect 15s timelapses.
 """
 VERSION = "1.0"
 
-import requests, time, os, threading, subprocess, json, glob
+import requests, time, os, threading, subprocess, json, glob, re
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify
 from collections import deque
 from pathlib import Path
@@ -32,31 +32,37 @@ class Printer:
         self.snapshot_dir = f"{SNAPSHOT_DIR}/{pid}"
         self.video_dir = f"{VIDEO_DIR}/{pid}"
         self.thumb_dir = f"{VIDEO_DIR}/{pid}/{THUMB_DIR}"
+        # safe naming policies (no space)
+        self.snapshot_dir = re.sub(r'\s+', '_', self.snapshot_dir)
+        self.video_dir = re.sub(r'\s+', '_', self.video_dir)
+        self.thumb_dir = re.sub(r'\s+', '_', self.thumb_dir)
+
         # Check if folders exists
-        self.ensure_printer_dirs
+        self.ensure_printer_dirs()
 
         # États internes
         self.is_printing = False
         self.last_layer = -1
         self.progress = 0
+        self.time_left = "Unknown"
         self.interval = 0
         self.last_snap_time = 0
         self.last_image_ts = 0
         self.logs = deque(maxlen=10)
+        self.job_filename = ""
 
         # Thread de monitoring
         threading.Thread(target=self.monitor_loop, daemon=True).start()
 
     def ensure_printer_dirs(self):
-        for d in [self.snapshot_dir, self.video_dir, self.thumb_dir]:
-            os.makedirs(d, exist_ok=True)
+        for dir in [self.snapshot_dir, self.video_dir, self.thumb_dir]:
+            os.makedirs(dir, exist_ok=True)
 
     def log(self, msg):
         self.logs.appendleft(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
     def monitor_loop(self):
         self.log("System ready.")
-        job_filename = ""
 
         while True:
             try:
@@ -71,28 +77,29 @@ class Printer:
                 is_active = stats["virtual_sdcard"].get("is_active", False)
                 current_layer = stats["virtual_sdcard"].get("current_layer", 0)
                 self.progress = int(stats["virtual_sdcard"].get("progress", 0) * 100)
+                self.time_left = int(stats["virtual_sdcard"].get("remain_time", "Unknown"))
 
-                # Détection début impression
+                # Start print detection
                 if state == "printing" and is_active and not self.is_printing:
                     self.is_printing = True
-                    job_filename = filename
+                    self.job_filename = filename
                     self.log("Print started.")
 
                     if self.mode == "time":
-                        self.interval = get_smart_interval(self.ip, filename)
+                        self.get_smart_interval
                         self.log(f"Smart Mode: {self.interval}s")
                     else:
                         self.interval = 0
 
-                # Fin impression
                 if self.is_printing:
+                    # End print detection
                     if not is_active or state in ["complete", "standby", "error", "cancelled"] or self.progress >= 100:
                         self.is_printing = False
                         self.log(f"Print stopped (State: {state})")
 
                         if state == "complete" or self.progress >= 100:
                             self.log("Auto-Render...")
-                            threading.Thread(target=render_video, args=(self, job_filename)).start()
+                            threading.Thread(target=self.render_video).start()
 
                         self.last_layer = -1
                         continue
@@ -127,6 +134,62 @@ class Printer:
 
             time.sleep(2)
 
+    def force_render_video(self):
+        self.render_video(True)
+
+    def render_video(self, job_manual=False):
+        job_name=""
+        if job_manual:
+            job_name="manual_render"
+        else:
+            job_name=self.job_filename
+
+        timestamp = time.strftime("%Y-%m-%d_%H-%M")
+        safe_name = "".join([c for c in job_name if c.isalnum()]).rstrip() or "print"
+        vid_name = f"{timestamp}_{safe_name}.mp4"
+
+        output_file = os.path.join(self.video_dir, vid_name)
+        thumb_file = os.path.join(self.thumb_dir, f"{vid_name}.jpg")
+
+        images = sorted(glob.glob(f"{self.snapshot_dir}/*.jpg"))
+        if len(images) < 2:
+            self.log("Error: Not enough frames for video.")
+            return
+
+        self.log(f"Rendering {vid_name} ({len(images)} frames)...")
+
+        try:
+            subprocess.run(
+                f"ffmpeg -y -framerate 30 -pattern_type glob -i '{self.snapshot_dir}/*.jpg' "
+                f"-c:v libx264 -pix_fmt yuv420p -crf 23 {output_file}",
+                shell=True, check=True
+            )
+
+            if images:
+                subprocess.run(f"cp {images[-1]} {thumb_file}", shell=True)
+
+            for f in images:
+                os.remove(f)
+
+            self.log("Render Success!")
+
+        except Exception as e:
+            self.log(f"Render Error: {e}")
+            
+    def get_smart_interval(self):
+        estimated_time = 0
+        try:
+            url = f"http://{self.ip}/server/files/metadata?filename={self.job_filename}"
+            r = requests.get(url, timeout=2)
+            meta = r.json()
+            estimated_time = meta['result'].get('estimated_time', 0)
+        except: pass
+        if estimated_time > 0:
+            calc = max(5, min(estimated_time / 450, 60))
+            self.interval = int(calc)
+        else:
+            self.interval = 15
+
 def check_and_init_printer_config():
     path = Path(f"{CONFIG_DIR}/{CONFIG_FILE}")
     if not path.exists():
@@ -144,55 +207,11 @@ def load_printer_config():
         data = json.load(f)
         return data["printers"]
 
-def render_video(printer, job_name="manual_render"):
-    timestamp = time.strftime("%Y-%m-%d_%H-%M")
-    safe_name = "".join([c for c in job_name if c.isalnum()]).rstrip() or "print"
-    vid_name = f"{timestamp}_{safe_name}.mp4"
-
-    output_file = os.path.join(printer.video_dir, vid_name)
-    thumb_file = os.path.join(printer.thumb_dir, f"{vid_name}.jpg")
-
-    images = sorted(glob.glob(f"{printer.snapshot_dir}/*.jpg"))
-    if len(images) < 2:
-        printer.log("Error: Not enough frames for video.")
-        return
-
-    printer.log(f"Rendering {vid_name} ({len(images)} frames)...")
-
-    try:
-        subprocess.run(
-            f"ffmpeg -y -framerate 30 -pattern_type glob -i '{printer.snapshot_dir}/*.jpg' "
-            f"-c:v libx264 -pix_fmt yuv420p -crf 23 {output_file}",
-            shell=True, check=True
-        )
-
-        if images:
-            subprocess.run(f"cp {images[-1]} {thumb_file}", shell=True)
-
-        for f in images:
-            os.remove(f)
-
-        printer.log("Render Success!")
-
-    except Exception as e:
-        printer.log(f"Render Error: {e}")
-
-def get_smart_interval(ip, filename):
-    try:
-        url = f"http://{ip}/server/files/metadata?filename={filename}"
-        r = requests.get(url, timeout=2)
-        meta = r.json()
-        estimated_time = meta['result'].get('estimated_time', 0)
-        if estimated_time > 0:
-            calc = max(5, min(estimated_time / 450, 60))
-            return int(calc)
-    except: pass
-    return 15
-
 def reload_printers():
     global PRINTERS
 
     # Charger le fichier JSON
+    check_and_init_printer_config()
     with open( f"{CONFIG_DIR}/{CONFIG_FILE}", "r") as f:
         data = json.load(f)
 
@@ -212,15 +231,12 @@ def reload_printers():
                 pid=pid,
                 ip=cfg["ip"],
                 mode=cfg.get("mode", "layer")
-            )
+            ) 
         else:
             # Mise à jour des paramètres
             p = PRINTERS[pid]
             p.ip = cfg["ip"]
             p.mode = cfg.get("mode", "layer")
-
-        # Vérifier / créer les dossiers
-        ensure_printer_dirs(pid)
 
 def auto_reload_loop():
     while True:
@@ -228,8 +244,9 @@ def auto_reload_loop():
         time.sleep(600)
 
 def init_system():
+    global PRINTERS
     # Check if the bases folders exists or create them
-    for d in [SNAPSHOT_DIR, VIDEO_DIR, THUMB_DIR, CONFIG_DIR]: 
+    for d in [SNAPSHOT_DIR, VIDEO_DIR, CONFIG_DIR]: 
         os.makedirs(d, exist_ok=True)
 
     check_and_init_printer_config()
@@ -258,7 +275,8 @@ def status_api(pid):
         "img_ts": p.last_image_ts,
         "video_count": video_count,
         "mode": p.mode,
-        "interval": p.interval
+        "interval": p.interval,
+        "remaining": p.time_left
     })
 
 @app.route('/manual_render/<pid>')
@@ -266,7 +284,7 @@ def manual_render(pid):
     p = PRINTERS[pid]
     if p.is_printing:
         return "Not possible during active print", 400
-    threading.Thread(target=render_video, args=(p, "manual_job")).start()
+    threading.Thread(target=p.force_render_video).start()
     return redirect('/')
 
 @app.route('/favicon.ico')
@@ -287,7 +305,7 @@ def index():
 
         printers_data.append({
             "id": pid,
-            "name": pid,  # ou p.name si tu l’ajoutes dans printers.json
+            "name": pid,
             "vids": vids,
             "ip": p.ip,
             "mode": p.mode
@@ -302,7 +320,7 @@ def save_config(pid):
     p.ip = request.form.get('ip')
     p.mode = request.form.get('mode')
 
-    # Mise à jour du fichier JSON
+    # JSON file update
     with open( f"{CONFIG_DIR}/{CONFIG_FILE}", "r") as f:
         data = json.load(f)
 
