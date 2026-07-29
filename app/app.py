@@ -3,12 +3,11 @@ Moonraker docker Timelapse - Automatic Timelapse creator for Moonraker based Pri
 Created by: johann-gillieron
 Based on the work of: aenima1337
 License: MIT
-Description: Automatically detects print status via Moonraker API and 
-calculates ideal intervals for perfect 15s timelapses.
+Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 5 seconds between frame.
 """
-VERSION = "1.0"
+VERSION = "2.3"
 
-import requests, time, os, threading, subprocess, json, glob, re, numbers
+import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify
 from collections import deque
 from pathlib import Path
@@ -23,9 +22,10 @@ PORT = 5115
 PRINTERS = {}
 
 class Printer:
-    def __init__(self, pid, ip, mode="layer"):
+    def __init__(self, pid, ip, name="null", mode="layer"):
         self.pid = pid
         self.ip = ip
+        self.name = name
         self.mode = mode
 
         # Dedicate folder
@@ -233,14 +233,22 @@ class Printer:
 
 def check_and_init_printer_config():
     path = Path(f"{CONFIG_DIR}/{CONFIG_FILE}")
+    data_default = {'printers': [{'id': '00000000-0000-0000-0000-000000000000', 'name': 'Unique name', 'model': 'Brand Model', 'ip': '10.10.10.90', 'mode': 'layer'}]}
     if not path.exists():
         print("Config is missing, creating a new one.")
-        data = {'printers': [{'id': 'Name', 'name': 'Brand Model', 'ip': '10.10.10.90', 'mode': 'layer'}]}
         os.makedirs(CONFIG_DIR, exist_ok=True)
 
         with open(f"{CONFIG_DIR}/{CONFIG_FILE}", "w") as f:
-            json.dump(data, f, indent=4)
+            json.dump(data_default, f, indent=4)
     else:
+        try:
+            with open(f"{CONFIG_DIR}/{CONFIG_FILE}", "r") as f:
+                data_default = json.load(f)
+        except Exception as e:
+            print(f"Error: {e}, json malformed. reinit...")
+            with open(f"{CONFIG_DIR}/{CONFIG_FILE}", "w") as f:
+                json.dump(data_default, f, indent=4)
+                return
         print("Config exists pass")
 
 def load_printer_config():
@@ -271,12 +279,14 @@ def reload_printers():
             PRINTERS[pid] = Printer(
                 pid=pid,
                 ip=cfg["ip"],
+                name=cfg["name"],
                 mode=cfg.get("mode", "layer")
             ) 
         else:
             # Mise à jour des paramètres
             p = PRINTERS[pid]
             p.ip = cfg["ip"]
+            p.name = cfg["name"],
             p.mode = cfg.get("mode", "layer")
 
 def auto_reload_loop():
@@ -298,6 +308,7 @@ def init_system():
         PRINTERS[pid] = Printer(
             pid=pid,
             ip=cfg["ip"],
+            name=cfg["name"],
             mode=cfg.get("mode", "layer")
         )
 
@@ -346,7 +357,7 @@ def index():
 
         printers_data.append({
             "id": pid,
-            "name": pid,
+            "name": p.name,
             "vids": vids,
             "ip": p.ip,
             "mode": p.mode
@@ -386,6 +397,11 @@ def last_snap(pid):
 
     return redirect("https://via.placeholder.com/320x180/1a1d23/3b82f6?text=Ready")
 
+@app.route('/actual_snap/<pid>')
+def actual_snap(pid):
+    p = PRINTERS[pid]
+    return redirect(f"http://{p.ip}/webcam/?action=snapshot")
+
 @app.route('/thumb/<pid>/<path:filename>')
 def thumb(pid, filename):
     p = PRINTERS[pid]
@@ -417,15 +433,29 @@ def admin_page():
 
 @app.route('/admin/add', methods=['POST'])
 def admin_add():
-    new_printer = {
-        "id": request.form["id"],
-        "name": request.form["name"],
-        "ip": request.form["ip"],
-        "mode": request.form["mode"]
-    }
+    pid = str(uuid.uuid5(uuid.NAMESPACE_DNS, request.form["ip"]))
 
     with open( f"{CONFIG_DIR}/{CONFIG_FILE}", "r") as f:
         data = json.load(f)
+
+    duplicata = False
+    while True:
+        duplicata = False
+        for printer in data["printers"]:
+            if printer["id"] == pid:
+                pid = str(uuid.uuid4())
+                duplicata = True
+                print("Epic fact: two uuid in config are the same:", printer["id"], " So a new one is picked:", pid)
+        if not duplicata:
+            break
+
+    new_printer = {
+        "id": pid,
+        "name": request.form["name"],
+        "model": request.form["model"],
+        "ip": request.form["ip"],
+        "mode": request.form["mode"]
+    }
 
     data["printers"].append(new_printer)
 
@@ -463,6 +493,7 @@ def admin_edit_save(pid):
     for p in data["printers"]:
         if p["id"] == pid:
             p["name"] = request.form["name"]
+            p["model"] = request.form["name"]
             p["ip"] = request.form["ip"]
             p["mode"] = request.form["mode"]
 
@@ -475,7 +506,6 @@ def admin_edit_save(pid):
 def admin_reload():
     reload_printers()
     return redirect('/admin')
-
 
 # -- initialisations --
 init_system()

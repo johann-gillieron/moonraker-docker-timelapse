@@ -55,7 +55,7 @@ http://[YOUR_DOCKER_HOST_IP]:5115/admin
 
 Includes:
 
-- Add a printer (ID, name, IP, mode)
+- Add a printer (name, model, IP, mode)
 - Edit printer settings
 - Delete printers
 - Reload configuration dynamically
@@ -152,7 +152,7 @@ Fetches metadata from the G-code file:
 
 ## 🛠️ Troubleshooting: Layer Mode Not Working
 
-If **Layer Mode** does not trigger snapshots, the issue is usually related to **slicer G-code comments**.  
+If **Layer Mode** does not trigger or inconsistent trigger the snapshots, the issue is usually related to **slicer G-code comments**.  
 Moonraker relies on specific comments inside the G-code file to detect layer changes.  
 Some slicers do **not** include these comments by default.
 

@@ -64,8 +64,8 @@
                 {{p.name}}
             </div>
         {% endfor %}
-        <div style="display:flex; justify-content:flex-end; margin-bottom:15px;">
-            <a href="/admin" class="btn" style="text-decoration:none;">ADMIN</a>
+        <div class ="tab-btn">
+            <a href="/admin" style="text-decoration:none;">ADMIN</a>
         </div>
     </div>
 
@@ -229,8 +229,16 @@
             document.getElementById('player').pause();
         }
 
-        function formatTime(seconds) {
-            if (!seconds || seconds < 0) return "--";
+        function formatTime(value) {
+            if (value === null || value === undefined || value === "Unknown") {
+                return "--";
+            }
+
+            // Convertir en nombre
+            const seconds = Number(value);
+            if (isNaN(seconds) || seconds < 0 || !seconds) {
+                return "--";
+            }
 
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);

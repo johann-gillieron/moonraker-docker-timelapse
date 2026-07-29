@@ -1,14 +1,16 @@
 {
     "printers": [
         {
-            "id": "ID name",
-            "name": "Brand Model",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "Unique Name",
+            "model": "Brand and Model",
             "ip": "10.10.10.90",
             "mode": "layer"
         },
         {
-            "id": "ID name 2",
-            "name": "Brand Model",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "Unique Name 2",
+            "model": "Brand and Model 2",
             "ip": "10.10.10.91",
             "mode": "time"
         }
