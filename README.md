@@ -150,6 +150,51 @@ Fetches metadata from the G-code file:
 
 ---
 
+## 🛠️ Troubleshooting: Layer Mode Not Working
+
+If **Layer Mode** does not trigger snapshots, the issue is usually related to **slicer G-code comments**.  
+Moonraker relies on specific comments inside the G-code file to detect layer changes.  
+Some slicers do **not** include these comments by default.
+
+To fix this, you must manually add layer‑change comments in your slicer’s machine G-code settings.
+
+### 🧩 Example: OrcaSlicer
+
+Go to:
+
+```
+Printer Settings → Machine G-code
+```
+
+Then add the following:
+
+#### **G-code before layer change**
+```gcode
+; BEFORE_LAYER_CHANGE [layer_num] @ [layer_z]mm
+```
+
+#### **G-code after layer change**
+```gcode
+; AFTER_LAYER_CHANGE [layer_num] @ [layer_z]mm
+```
+
+### ✔️ Why this is required
+
+Moonraker parses the G-code file and uses these comments to update:
+
+- `current_layer`
+- `layer_z`
+- layer‑based progress tracking
+
+Without these comments, Moonraker cannot detect layer changes, and **Layer Mode will not capture frames**.
+
+### 💡 Tip
+
+If you use another slicer (PrusaSlicer, SuperSlicer, Cura, etc.), ensure it also inserts layer‑change comments.  
+Most slicers support this, but the syntax may differ.
+
+---
+
 ## 📄 License and Credits
 
 - **Author:** Johann Gillieron  
