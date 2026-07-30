@@ -5,7 +5,7 @@ Based on the work of: aenima1337
 License: MIT
 Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 5 seconds between frame.
 """
-VERSION = "2.4"
+VERSION = "2.5"
 
 import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response
@@ -52,6 +52,8 @@ class Printer:
         self.logs = deque(maxlen=10)
         self.job_filename = ""
         self.job_file_size = 0
+        self.job_file_gcode_start_byte = 0
+        self.job_file_gcode_end_byte = 0
         self.job_slicer_estimate_time = 0
         self.job_filament_total = 0
         self.job_layer_count = 0
@@ -73,6 +75,7 @@ class Printer:
 
         while True:
             try:
+                #print(self.name)
                 r = requests.get(
                     f"http://{self.ip}/printer/objects/query?virtual_sdcard&print_stats&toolhead&extruder",
                     timeout=3
@@ -84,8 +87,8 @@ class Printer:
                 current_layer = stats["print_stats"]["info"].get("current_layer", "None")
                 filament_used = stats["print_stats"].get("filament_used", 0)
                 is_active = stats["virtual_sdcard"].get("is_active", False)
+                print_duration = stats["print_stats"].get("print_duration", 0)
                 file_position = stats["virtual_sdcard"].get("file_position", 0)
-                print_duration = stats["virtual_sdcard"].get("total_duration", 0)
                 self.progress = int(stats["virtual_sdcard"].get("progress", 0) * 100)
                 actual_height = stats["toolhead"].get("position")[2]
                 self.time_left = self.compute_estimed_time_left(file_position, filament_used, print_duration)
@@ -95,7 +98,7 @@ class Printer:
                     #print(current_layer) #uncomment for debug
 
                 # Start print detection
-                if state == "printing" and is_active and not self.is_printing:
+                if state == "printing" and self.progress < 100 and is_active and not self.is_printing:
                     self.is_printing = True
                     self.job_filename = filename
                     self.log("Print started.")
@@ -109,11 +112,11 @@ class Printer:
                 if self.is_printing:
                     # End print detection
                     if not is_active or state in ["complete", "standby", "error", "cancelled"] or self.progress >= 100:
-                        self.is_printing = False
                         self.log(f"Print stopped (State: {state})")
 
-                        if state == "complete" or self.progress >= 100:
+                        if (state == "complete" or self.progress >= 100) and self.is_printing:
                             self.log("Auto-Render...")
+                            self.is_printing = False
                             threading.Thread(target=self.render_video).start()
 
                         self.last_layer = -1
@@ -198,6 +201,8 @@ class Printer:
                 timeout=3
             ).json()
             self.job_file_size = meta['result'].get('size', 0)
+            self.job_file_gcode_start_byte = meta['result'].get('gcode_start_byte', 0)
+            self.job_file_gcode_end_byte = meta['result'].get('gcode_end_byte', 0)
             self.job_slicer_estimate_time = meta['result'].get('estimated_time', 0)
             self.job_filament_total = meta['result'].get('filament_total', 0)
             self.job_layer_count = meta['result'].get('layer_count', 0)
@@ -210,7 +215,9 @@ class Printer:
 
         # compute the smart capture interval time
         if self.job_slicer_estimate_time > 0:
-            calc = max(5, min(self.job_slicer_estimate_time / 450, 60))
+            calc = 5
+            if self.job_layer_count != 0:
+                calc = max(5, min(self.job_slicer_estimate_time / self.job_layer_count, 60))
             self.smart_capture_interval = int(calc)
         else:
             self.smart_capture_interval = 15
@@ -227,7 +234,8 @@ class Printer:
             filament_percent = (1.0 * filament_used) / self.job_filament_total
             file_percent = (1.0 * file_position) / self.job_file_size
             estimate_percent = (filament_percent + file_percent) / 2
-            return (print_duration / estimate_percent) - print_duration
+            if (estimate_percent != 0):
+                return int((print_duration / estimate_percent) - print_duration)
         return "unknow"
 
 

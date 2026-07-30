@@ -205,10 +205,7 @@
                     document.getElementById('log-box-' + pid).innerHTML =
                         data.logs.map(l => `<div style="border-bottom:1px solid #1e293b">${l}</div>`).join('');
 
-                    document.getElementById('cam-img-' + pid).src =
-                        '/last_snap/' + pid + '?t=' + data.img_ts;
-                    document.getElementById('remaining-' + pid).innerText =
-                        formatTime(data.remaining);
+                    document.getElementById('remaining-' + pid).innerText = formatTime(data.remaining);
                 });
         }
 
@@ -238,8 +235,8 @@
             }
 
             // Convertir en nombre
-            const seconds = Number(value);
-            if (isNaN(seconds) || seconds < 0 || !seconds) {
+            const seconds = value;
+            if (isNaN(seconds) || (seconds < 0) || (seconds === 0)) {
                 return "--";
             }
 
