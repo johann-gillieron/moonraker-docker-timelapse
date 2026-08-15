@@ -168,30 +168,34 @@ Printer Settings → Machine G-code
 
 Then add the following:
 
-#### **G-code before layer change**
+#### **Start G-Code (before your start G-Code)**
 ```gcode
-; BEFORE_LAYER_CHANGE [layer_num] @ [layer_z]mm
+SET_PRINT_STATS_INFO TOTAL_LAYER=[total_layer_count]
+```
+#### **End G-Code (at the last line)**
+```gcode
+; total layers count = [total_layer_count]
 ```
 
-#### **G-code after layer change**
+#### **After layer change G-Code:**
 ```gcode
-; AFTER_LAYER_CHANGE [layer_num] @ [layer_z]mm
+SET_PRINT_STATS_INFO CURRENT_LAYER={layer_num + 1}
 ```
 
 ### ✔️ Why this is required
 
 Moonraker parses the G-code file and uses these comments to update:
 
-- `current_layer`
-- `layer_z`
-- layer‑based progress tracking
+- `SET_PRINT_STATS_INFO CURRENT_LAYER=`
+- `SET_PRINT_STATS_INFO TOTAL_LAYER=`
+- '; total layers count = [total_layer_count]'
 
-Without these comments, Moonraker cannot detect layer changes, and **Layer Mode will not capture frames**.
+Without these comments, Moonraker cannot detect layer changes, and **Layer Mode will not capture frames accurately**.
 
 ### 💡 Tip
 
-If you use another slicer (PrusaSlicer, SuperSlicer, Cura, etc.), ensure it also inserts layer‑change comments.  
-Most slicers support this, but the syntax may differ.
+If you use another slicer (PrusaSlicer, SuperSlicer, Cura, etc.), ensure it also inserts layer‑change command.  
+Most slicers support this, but the syntax may differ. Check the [mainsail docs](https://docs.mainsail.xyz/slicers/) for more information.
 
 ---
 
