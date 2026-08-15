@@ -59,7 +59,7 @@
     <!-- ===================== PRINTER TABS ===================== -->
     <div class="tabs">
         {% for p in printers %}
-            <div class="tab-btn {% if loop.first %}active{% endif %}"
+            <div class="tab-btn"
                  onclick="switchTab('{{p.id}}')" id="tab-{{p.id}}">
                 {{p.name}}
             </div>
@@ -71,7 +71,7 @@
 
     <!-- ===================== DASHBOARD PER PRINTER ===================== -->
     {% for p in printers %}
-    <div class="tab-content {% if loop.first %}active{% endif %}" id="content-{{p.id}}">
+    <div class="tab-content" id="content-{{p.id}}">
 
         <div class="layout">
 
@@ -174,13 +174,15 @@
 
     <!-- ===================== JAVASCRIPT ===================== -->
     <script>
-
         function switchTab(id) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
             document.getElementById('tab-' + id).classList.add('active');
             document.getElementById('content-' + id).classList.add('active');
+
+            // save the active tab
+            localStorage.setItem("activeTab", id);
         }
 
         function updateStatus(pid) {
@@ -234,7 +236,6 @@
                 return "--";
             }
 
-            // Convertir en nombre
             const seconds = value;
             if (isNaN(seconds) || (seconds < 0) || (seconds === 0)) {
                 return "--";
@@ -258,6 +259,21 @@
             // Add a timestamp to avoid the browser cache
             img.src = `/live_snap/${pid}?t=${Date.now()}`;
         }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const saved = localStorage.getItem("activeTab");
+
+            if (saved) {
+                switchTab(saved);
+            } else {
+                // activate the first tab by default
+                const first = document.querySelector(".tab-button");
+                if (first) {
+                    const pid = first.id.replace("tab-", "");
+                    switchTab(pid);
+                }
+            }
+        });
     </script>
 </body>
 </html>
