@@ -5,7 +5,7 @@ Based on the work of: aenima1337
 License: MIT
 Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 5 seconds between frame.
 """
-VERSION = "2.5"
+VERSION = "2.5.5"
 
 import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response
@@ -18,7 +18,7 @@ CONFIG_FILE = "printers.json"
 SNAPSHOT_DIR = "snapshots"
 VIDEO_DIR = "videos"
 THUMB_DIR = "thumbs"
-PORT = 5115
+PORT = 80 # 5115 # Developpement port only
 PRINTERS = {}
 
 class Printer:

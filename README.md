@@ -112,6 +112,8 @@ services:
     container_name: moonraker-docker-timelapse
     restart: unless-stopped
     network_mode: host
+    port:
+      - 5115:80
     volumes:
       - ./config:/app/config
       - ./snapshots:/app/snapshots
