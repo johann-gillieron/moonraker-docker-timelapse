@@ -111,8 +111,7 @@ services:
     image: ghcr.io/johann-gillieron/moonraker-docker-timelapse:latest
     container_name: moonraker-docker-timelapse
     restart: unless-stopped
-    network_mode: host
-    port:
+    ports:
       - 5115:80
     volumes:
       - ./config:/app/config
