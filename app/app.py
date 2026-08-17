@@ -113,11 +113,9 @@ class Printer:
                     # End print detection
                     if not is_active or state in ["complete", "standby", "error", "cancelled"] or self.progress >= 100:
                         self.log(f"Print stopped (State: {state})")
-
-                        if (state == "complete" or self.progress >= 100) and self.is_printing:
-                            self.log("Auto-Render...")
-                            self.is_printing = False
-                            threading.Thread(target=self.render_video).start()
+                        self.log("Auto-Render...")
+                        self.is_printing = False
+                        threading.Thread(target=self.render_video).start()
 
                         self.last_layer = -1
                         continue
