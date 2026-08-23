@@ -5,7 +5,7 @@ Based on the work of: aenima1337
 License: MIT
 Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 5 seconds between frame.
 """
-VERSION = "2.7"
+VERSION = "2.8"
 
 import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response
@@ -18,6 +18,7 @@ CONFIG_FILE = "printers.json"
 SNAPSHOT_DIR = "snapshots"
 VIDEO_DIR = "videos"
 THUMB_DIR = "thumbs"
+NB_TIMELAPSE_PER_PAGE = 20
 PORT = 80 # 5115 # Developpement port only
 PRINTERS = {}
 
@@ -42,6 +43,7 @@ class Printer:
 
         # Internal State
         self.is_printing = False
+        self.is_online = False
         self.last_layer = -1
         self.progress = 0
         self.time_left = "Unknown"
@@ -60,7 +62,6 @@ class Printer:
         self.job_first_layer_height = 0
         self.job_layer_height = 0
         self.job_success = False
-        self.printer_online = False
 
         # Monitoring thread
         threading.Thread(target=self.monitor_loop, daemon=True).start()
@@ -74,7 +75,7 @@ class Printer:
 
     def monitor_loop(self):
         self.log("System ready.")
-        self.printer_online = True
+        self.is_online = True
 
         while True:
             try:
@@ -83,14 +84,14 @@ class Printer:
                     timeout=3
                 ).json()
             except requests.exceptions.ConnectionError:
-                if self.printer_online:
-                    self.printer_online = False
+                if self.is_online:
+                    self.is_online = False
                     self.log("Printer offline after trying to connect")
                 time.sleep(5)
                 continue
             except requests.exceptions.Timeout:
-                if self.printer_online:
-                    self.printer_online = False
+                if self.is_online:
+                    self.is_online = False
                     self.log("Printer offline after timeout")
                 time.sleep(5)
                 continue
@@ -99,8 +100,8 @@ class Printer:
                 time.sleep(5)
                 continue
 
-            if not self.printer_online:
-                self.printer_online = True
+            if not self.is_online:
+                self.is_online = True
                 self.log("Printer back online")
 
             stats = response["result"]["status"]
@@ -134,15 +135,15 @@ class Printer:
             if self.is_printing:
                 # End print detection
                 if not is_active or state in ["complete", "standby", "error", "cancelled"] or self.progress >= 100:
-                    self.log(f"Print stopped (State: {state})")
                     if state == "paused":
                         continue
+                    self.log(f"Print stopped (State: {state})")
                     self.log("Auto-Render...")
                     self.is_printing = False
-                    if state == "complete" and self.progress >= 100:
-                        self.job_success = True
-                    else:
+                    if state == "error" or state == "cancelled" :
                         self.job_success = False
+                    else:
+                        self.job_success = True
                     #threading.Thread(target=self.render_video).start()
                     self.render_video(False)
                     self.last_layer = -1
@@ -224,13 +225,13 @@ class Printer:
                 timeout=3
             ).json()
         except requests.exceptions.ConnectionError:
-            if self.printer_online:
-                self.printer_online = False
+            if self.is_online:
+                self.is_online = False
                 self.log("Printer offline after trying to connect")
             return
         except requests.exceptions.Timeout:
-            if self.printer_online:
-                self.printer_online = False
+            if self.is_online:
+                self.is_online = False
                 self.log("Printer offline after timeout")
             return
         except Exception as e:
@@ -271,7 +272,6 @@ class Printer:
             if (estimate_percent != 0):
                 return int((print_duration / estimate_percent) - print_duration)
         return "unknow"
-
 
 def check_and_init_printer_config():
     path = Path(f"{CONFIG_DIR}/{CONFIG_FILE}")
@@ -356,7 +356,6 @@ def init_system():
 
     #threading.Thread(target=auto_reload_loop, daemon=True).start()
 
-
 # --- API ENDPOINTS ---
 @app.route('/status/<pid>')
 def status_api(pid):
@@ -364,6 +363,7 @@ def status_api(pid):
     video_count = len([f for f in os.listdir(p.video_dir) if f.endswith('.mp4')])
     return jsonify({
         "is_printing": p.is_printing,
+        "is_online": p.is_online,
         "progress": p.progress,
         "logs": list(p.logs),
         "img_ts": p.last_image_ts,
@@ -386,26 +386,26 @@ def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static'),
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-# --- WEB INTERFACE ---
-@app.route('/')
-def index():
-    printers_data = []
+@app.route("/timelapse_list/<pid>")
+def timelapse_list(pid):
+    p = PRINTERS[pid]
+    page = int(request.args.get("page", 1))
 
-    for pid, p in PRINTERS.items():
-        vids = sorted(
-            [f for f in os.listdir(p.video_dir) if f.endswith('.mp4')],
-            reverse=True
-        )
+    files = sorted(
+        [f for f in os.listdir(p.video_dir) if f.endswith(".mp4")],
+        reverse=True
+    )
 
-        printers_data.append({
-            "id": pid,
-            "name": p.name,
-            "vids": vids,
-            "ip": p.ip,
-            "mode": p.mode
-        })
+    start = (page - 1) * NB_TIMELAPSE_PER_PAGE
+    end = start + NB_TIMELAPSE_PER_PAGE
 
-    return render_template("index.html", printers=printers_data, version=VERSION)
+    chunk = files[start:end]
+    print(f"pid: {pid}, start : {start}, end: {end}, chunk: {chunk}")
+
+    return jsonify({
+        "videos": chunk,
+        "has_more": end < len(files)
+    })
 
 @app.route('/save_config/<pid>', methods=['POST'])
 def save_config(pid):
@@ -472,6 +472,27 @@ def delete(pid, filename):
         pass
 
     return redirect('/')
+
+# --- WEB INTERFACE ---
+@app.route('/')
+def index():
+    printers_data = []
+
+    for pid, p in PRINTERS.items():
+        vids = sorted(
+            [f for f in os.listdir(p.video_dir) if f.endswith('.mp4')],
+            reverse=True
+        )
+
+        printers_data.append({
+            "id": pid,
+            "name": p.name,
+            "vids": vids,
+            "ip": p.ip,
+            "mode": p.mode
+        })
+
+    return render_template("index.html", printers=printers_data, version=VERSION)
 
 # --- ADMIN WEB INTERFACE ---
 @app.route('/admin')
