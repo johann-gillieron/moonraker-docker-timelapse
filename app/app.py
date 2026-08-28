@@ -44,6 +44,7 @@ class Printer:
         # Internal State
         self.is_printing = False
         self.is_online = False
+        self.is_paused = False
         self.last_layer = -1
         self.progress = 0
         self.time_left = "Unknown"
@@ -83,98 +84,113 @@ class Printer:
                     f"http://{self.ip}/printer/objects/query?virtual_sdcard&print_stats&toolhead&extruder",
                     timeout=3
                 ).json()
+                
+                stats = response["result"]["status"]
+                state = stats["print_stats"]["state"]
+                filename = stats["print_stats"]["filename"]
+                current_layer = stats["print_stats"]["info"].get("current_layer", "None")
+                filament_used = stats["print_stats"].get("filament_used", 0)
+                is_active = stats["virtual_sdcard"].get("is_active", False)
+                print_duration = stats["print_stats"].get("print_duration", 0)
+                file_position = stats["virtual_sdcard"].get("file_position", 0)
+                self.progress = int(stats["virtual_sdcard"].get("progress", 0) * 100)
+                actual_height = stats["toolhead"].get("position")[2]
+                self.time_left = self.compute_estimed_time_left(file_position, filament_used, print_duration)
+
+                if not self.is_online:
+                    self.is_online = True
+                    self.log("Printer back online")
+
+                if not (isinstance(current_layer, numbers.Number)):
+                    current_layer = self.compute_actual_layer(actual_height)
+                    #print(current_layer) #uncomment for debug
+
+                # Start print detection
+                if state == "printing" and self.progress < 100 and is_active and not self.is_printing:
+                    self.is_printing = True
+                    self.job_filename = filename
+                    self.log("Print started.")
+                    self.extract_metadata_from_job_file()
+
+                    if self.mode == "time":
+                        self.log(f"Smart Mode: {self.smart_capture_interval}s")
+                    else:
+                        self.smart_capture_interval = 0
+
+                if self.is_printing:
+                    # End print detection
+                    if not is_active or state in ["complete", "standby", "error", "cancelled"] or self.progress >= 100:
+                        if state == "paused":
+                            if not self.is_paused:
+                                self.log("Print paused")
+                                self.is_paused = True
+                            continue
+
+                        self.log(f"Print stopped (State: {state})")
+                        self.log("Auto-Render...")
+                        self.is_printing = False
+                        self.is_paused = False
+
+                        if state == "error" or state == "cancelled" :
+                            self.job_success = False
+                        else:
+                            self.job_success = True
+                        #threading.Thread(target=self.render_video).start()
+                        self.render_video(False)
+                        self.last_layer = -1
+                        continue
+                    
+                    if self.is_paused and state != "paused":
+                        if state == "printing":
+                            self.log("Print resumed")
+                        self.is_paused = False
+
+                    # Capture
+                    take_snap = False
+                    if self.mode == "layer":
+                        if current_layer > 0 and current_layer != self.last_layer:
+                            take_snap = True
+                            self.last_layer = current_layer
+
+                    elif self.mode == "time":
+                        now = time.time()
+                        if (now - self.last_snap_time) > self.smart_capture_interval:
+                            take_snap = True
+                            self.last_snap_time = now
+
+                    if take_snap:
+                        ts_idx = int(time.time() * 10)
+                        img_data = requests.get(
+                            f"http://{self.ip}/webcam/?action=snapshot",
+                            timeout=5
+                        ).content
+
+                        with open(f"{self.snapshot_dir}/frame_{ts_idx}.jpg", "wb") as f:
+                            f.write(img_data)
+
+                        self.last_image_ts = time.time()
+
+                time.sleep(2)
             except requests.exceptions.ConnectionError:
                 if self.is_online:
                     self.is_online = False
                     self.log("Printer offline after trying to connect")
-                time.sleep(5)
+                time.sleep(10)
                 continue
             except requests.exceptions.Timeout:
                 if self.is_online:
                     self.is_online = False
                     self.log("Printer offline after timeout")
-                time.sleep(5)
+                time.sleep(10)
+                continue
+            except ValueError:
+                self.log(f"Printer is starting...")
+                time.sleep(30)
                 continue
             except Exception as e:
                 self.log(f"Error: {e}")
                 time.sleep(5)
                 continue
-
-            if not self.is_online:
-                self.is_online = True
-                self.log("Printer back online")
-
-            stats = response["result"]["status"]
-            state = stats["print_stats"]["state"]
-            filename = stats["print_stats"]["filename"]
-            current_layer = stats["print_stats"]["info"].get("current_layer", "None")
-            filament_used = stats["print_stats"].get("filament_used", 0)
-            is_active = stats["virtual_sdcard"].get("is_active", False)
-            print_duration = stats["print_stats"].get("print_duration", 0)
-            file_position = stats["virtual_sdcard"].get("file_position", 0)
-            self.progress = int(stats["virtual_sdcard"].get("progress", 0) * 100)
-            actual_height = stats["toolhead"].get("position")[2]
-            self.time_left = self.compute_estimed_time_left(file_position, filament_used, print_duration)
-
-            if not (isinstance(current_layer, numbers.Number)):
-                current_layer = self.compute_actual_layer(actual_height)
-                #print(current_layer) #uncomment for debug
-
-            # Start print detection
-            if state == "printing" and self.progress < 100 and is_active and not self.is_printing:
-                self.is_printing = True
-                self.job_filename = filename
-                self.log("Print started.")
-                self.extract_metadata_from_job_file()
-
-                if self.mode == "time":
-                    self.log(f"Smart Mode: {self.smart_capture_interval}s")
-                else:
-                    self.smart_capture_interval = 0
-
-            if self.is_printing:
-                # End print detection
-                if not is_active or state in ["complete", "standby", "error", "cancelled"] or self.progress >= 100:
-                    if state == "paused":
-                        continue
-                    self.log(f"Print stopped (State: {state})")
-                    self.log("Auto-Render...")
-                    self.is_printing = False
-                    if state == "error" or state == "cancelled" :
-                        self.job_success = False
-                    else:
-                        self.job_success = True
-                    #threading.Thread(target=self.render_video).start()
-                    self.render_video(False)
-                    self.last_layer = -1
-                    continue
-
-                # Capture
-                take_snap = False
-                if self.mode == "layer":
-                    if current_layer > 0 and current_layer != self.last_layer:
-                        take_snap = True
-                        self.last_layer = current_layer
-
-                elif self.mode == "time":
-                    now = time.time()
-                    if (now - self.last_snap_time) > self.smart_capture_interval:
-                        take_snap = True
-                        self.last_snap_time = now
-
-                if take_snap:
-                    ts_idx = int(time.time() * 10)
-                    img_data = requests.get(
-                        f"http://{self.ip}/webcam/?action=snapshot",
-                        timeout=5
-                    ).content
-
-                    with open(f"{self.snapshot_dir}/frame_{ts_idx}.jpg", "wb") as f:
-                        f.write(img_data)
-
-                    self.last_image_ts = time.time()
-
-            time.sleep(2)
 
     def force_render_video(self):
         self.render_video(True)
@@ -224,6 +240,25 @@ class Printer:
                 f"http://{self.ip}/server/files/metadata?filename={self.job_filename}",
                 timeout=3
             ).json()
+            
+            self.job_file_size = meta['result'].get('size', 0)
+            self.job_file_gcode_start_byte = meta['result'].get('gcode_start_byte', 0)
+            self.job_file_gcode_end_byte = meta['result'].get('gcode_end_byte', 0)
+            self.job_slicer_estimate_time = meta['result'].get('estimated_time', 0)
+            self.job_filament_total = meta['result'].get('filament_total', 0)
+            self.job_layer_count = meta['result'].get('layer_count', 0)
+            self.job_first_layer_height = meta['result'].get('first_layer_height', 0)
+            self.job_layer_height = meta['result'].get('layer_height', 0)
+            #print("metadata extraction", json.dumps(meta, indent=4)) #uncomment for debug
+
+            # compute the smart capture interval time
+            if self.job_slicer_estimate_time > 0:
+                calc = 5
+                if self.job_layer_count != 0:
+                    calc = max(5, min(self.job_slicer_estimate_time / self.job_layer_count, 60))
+                self.smart_capture_interval = int(calc)
+            else:
+                self.smart_capture_interval = 15
         except requests.exceptions.ConnectionError:
             if self.is_online:
                 self.is_online = False
@@ -234,28 +269,12 @@ class Printer:
                 self.is_online = False
                 self.log("Printer offline after timeout")
             return
+        except ValueError:
+            self.log(f"Printer is starting...")
+            return
         except Exception as e:
             self.log(f"Error: {e}")
             return
-
-        self.job_file_size = meta['result'].get('size', 0)
-        self.job_file_gcode_start_byte = meta['result'].get('gcode_start_byte', 0)
-        self.job_file_gcode_end_byte = meta['result'].get('gcode_end_byte', 0)
-        self.job_slicer_estimate_time = meta['result'].get('estimated_time', 0)
-        self.job_filament_total = meta['result'].get('filament_total', 0)
-        self.job_layer_count = meta['result'].get('layer_count', 0)
-        self.job_first_layer_height = meta['result'].get('first_layer_height', 0)
-        self.job_layer_height = meta['result'].get('layer_height', 0)
-        #print("metadata extraction", json.dumps(meta, indent=4)) #uncomment for debug
-
-        # compute the smart capture interval time
-        if self.job_slicer_estimate_time > 0:
-            calc = 5
-            if self.job_layer_count != 0:
-                calc = max(5, min(self.job_slicer_estimate_time / self.job_layer_count, 60))
-            self.smart_capture_interval = int(calc)
-        else:
-            self.smart_capture_interval = 15
 
     def compute_actual_layer(self, actual_height):
         #print("compute_actual_layer ", actual_height, self.job_first_layer_height, self.job_layer_height)
@@ -364,6 +383,7 @@ def status_api(pid):
     return jsonify({
         "is_printing": p.is_printing,
         "is_online": p.is_online,
+        "is_paused": p.is_paused,
         "progress": p.progress,
         "logs": list(p.logs),
         "img_ts": p.last_image_ts,
@@ -400,7 +420,7 @@ def timelapse_list(pid):
     end = start + NB_TIMELAPSE_PER_PAGE
 
     chunk = files[start:end]
-    print(f"pid: {pid}, start : {start}, end: {end}, chunk: {chunk}")
+    #print(f"pid: {pid}, start : {start}, end: {end}, chunk: {chunk}")
 
     return jsonify({
         "videos": chunk,
@@ -437,7 +457,7 @@ def last_snap(pid):
         latest = max(snaps, key=os.path.getmtime)
         return send_from_directory(p.snapshot_dir, os.path.basename(latest))
 
-    return redirect("https://via.placeholder.com/320x180/1a1d23/3b82f6?text=Ready")
+    return send_from_directory("static/", "no_cam.png")
 
 @app.route('/live_snap/<pid>')
 def live_snap(pid):
