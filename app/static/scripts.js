@@ -4,6 +4,8 @@ function switchTab(pid) {
 
     document.getElementById('tab-' + pid).classList.add('active');
     document.getElementById('content-' + pid).classList.add('active');
+    updateStatus(pid);
+    updateLiveSnapshot(pid);
 
     // save the active tab
     localStorage.setItem("activeTab", pid);
@@ -131,20 +133,24 @@ function initGallery(pid) {
     observer.observe(marker);
 }
 
-// Update for each printer
+// Update for active printer tab
 setInterval(() => {
-    const printers = document.querySelectorAll(".tab-btn");
-    // Init gallery for each printers
-    for (var i = 0; i < printers.length - 1; i++){
-        const pid = printers[i].id.replace("tab-", "");
-        updateStatus(pid);
-        updateLiveSnapshot(pid);
-    }
+    //const printers = document.querySelectorAll(".tab-btn");
+    //for (var i = 0; i < printers.length - 1; i++){
+    //    const pid = printers[i].id.replace("tab-", "");
+    //    updateStatus(pid);
+    //    updateLiveSnapshot(pid);
+    //}
+    const actual_tab = localStorage.getItem("activeTab");
+
+    updateStatus(actual_tab);
+    updateLiveSnapshot(actual_tab);
 }, 2000);
 
 document.addEventListener("DOMContentLoaded", () => {
     const saved = localStorage.getItem("activeTab");
     const printers = document.querySelectorAll(".tab-btn");
+    const firstpid = printers[0].id.replace("tab-", "")
     console.log('Load HTML page')
 
     // Init gallery for each printers
@@ -154,13 +160,13 @@ document.addEventListener("DOMContentLoaded", () => {
         initGallery(pid);
     }
     
+    // Restore last tab selected
     if (saved) {
         switchTab(saved);
     } else {
         // activate the first tab by default
         if (firstpid) {
-            const pid = printers[0].id.replace("tab-", "")
-            switchTab(pid);
+            switchTab(firstpid);
         }
     }
 });
