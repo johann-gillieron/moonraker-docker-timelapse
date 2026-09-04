@@ -5,7 +5,7 @@ Based on the work of: aenima1337
 License: MIT
 Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 5 seconds between frame.
 """
-VERSION = "2.8"
+VERSION = "2.9"
 
 import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response
@@ -73,6 +73,24 @@ class Printer:
 
     def log(self, msg):
         self.logs.appendleft(f"[{time.strftime('%H:%M:%S')}] {msg}")
+
+    def update_printer_info(self, pid, ip, name="null", mode="layer"):
+        self.pid = pid
+        self.ip = ip
+        self.name = name
+        self.mode = mode
+
+        # Dedicate folder
+        self.snapshot_dir = f"{SNAPSHOT_DIR}/{pid}"
+        self.video_dir = f"{VIDEO_DIR}/{pid}"
+        self.thumb_dir = f"{VIDEO_DIR}/{pid}/{THUMB_DIR}"
+        # safe naming policies (no space)
+        self.snapshot_dir = re.sub(r'\s+', '_', self.snapshot_dir)
+        self.video_dir = re.sub(r'\s+', '_', self.video_dir)
+        self.thumb_dir = re.sub(r'\s+', '_', self.thumb_dir)
+
+        # Check if folders exists
+        self.ensure_printer_dirs()
 
     def monitor_loop(self):
         self.log("System ready.")
@@ -322,10 +340,9 @@ def reload_printers():
 
     # Charger le fichier JSON
     check_and_init_printer_config()
-    with open( f"{CONFIG_DIR}/{CONFIG_FILE}", "r") as f:
-        data = json.load(f)
+    printer_configs = load_printer_config()
 
-    new_list = {p["id"]: p for p in data["printers"]}
+    new_list = {cfg["id"]: cfg for cfg in printer_configs}
 
     # Supprimer les imprimantes retirées du fichier
     for pid in list(PRINTERS.keys()):
@@ -334,7 +351,8 @@ def reload_printers():
             del PRINTERS[pid]
 
     # Ajouter / mettre à jour les imprimantes
-    for pid, cfg in new_list.items():
+    for cfg in printer_configs:
+        pid = cfg["id"]
         if pid not in PRINTERS:
             print(f"[Cluster] Adding printer {pid}")
             PRINTERS[pid] = Printer(
@@ -346,9 +364,12 @@ def reload_printers():
         else:
             # Mise à jour des paramètres
             p = PRINTERS[pid]
-            p.ip = cfg["ip"]
-            p.name = cfg["name"],
-            p.mode = cfg.get("mode", "layer")
+            p.update_printer_info(
+                pid=pid,
+                ip=cfg["ip"],
+                name=cfg["name"],
+                mode=cfg.get("mode", "layer")
+            )
 
 def auto_reload_loop():
     while True:
