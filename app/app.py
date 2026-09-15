@@ -3,9 +3,9 @@ Moonraker docker Timelapse - Automatic Timelapse creator for Moonraker based Pri
 Created by: johann-gillieron
 Based on the work of: aenima1337
 License: MIT
-Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 5 seconds between frame.
+Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 1 seconds between frame and a timelapse of ~15s.
 """
-VERSION = "2.9"
+VERSION = "2.9.1"
 
 import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
 from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response
@@ -19,6 +19,8 @@ SNAPSHOT_DIR = "snapshots"
 VIDEO_DIR = "videos"
 THUMB_DIR = "thumbs"
 NB_TIMELAPSE_PER_PAGE = 20
+TIMELAPSE_APROX_TIME_S = 15
+TIMELAPSE_IPS = 30
 PORT = 80 # 5115 # Developpement port only
 PRINTERS = {}
 
@@ -63,6 +65,8 @@ class Printer:
         self.job_first_layer_height = 0
         self.job_layer_height = 0
         self.job_success = False
+        self.timelapse_ips = TIMELAPSE_IPS
+        self.approx_time_of_timelapse = TIMELAPSE_APROX_TIME_S
 
         # Monitoring thread
         threading.Thread(target=self.monitor_loop, daemon=True).start()
@@ -218,11 +222,11 @@ class Printer:
         if job_manual:
             job_name="manual_render"
         else:
-            job_name=self.job_filename + ("_success" if self.job_success else "_fail")
+            safe_name = "".join([c for c in self.job_filename if c.isalnum()]).rstrip() or "print"
+            job_name=safe_name + ("_success" if self.job_success else "_fail")
 
         timestamp = time.strftime("%Y-%m-%d_%H-%M")
-        safe_name = "".join([c for c in job_name if c.isalnum()]).rstrip() or "print"
-        vid_name = f"{timestamp}_{safe_name}.mp4"
+        vid_name = f"{timestamp}_{job_name}.mp4"
 
         output_file = os.path.join(self.video_dir, vid_name)
         thumb_file = os.path.join(self.thumb_dir, f"{vid_name}.jpg")
@@ -236,7 +240,7 @@ class Printer:
 
         try:
             subprocess.run(
-                f"ffmpeg -y -framerate 30 -pattern_type glob -i '{self.snapshot_dir}/*.jpg' "
+                f"ffmpeg -y -framerate {self.timelapse_ips} -pattern_type glob -i '{self.snapshot_dir}/*.jpg' "
                 f"-c:v libx264 -pix_fmt yuv420p -crf 23 {output_file}",
                 shell=True, check=True
             )
@@ -269,14 +273,12 @@ class Printer:
             self.job_layer_height = meta['result'].get('layer_height', 0)
             #print("metadata extraction", json.dumps(meta, indent=4)) #uncomment for debug
 
-            # compute the smart capture interval time
+            # compute the smart capture interval time to have a 15s timelapse
             if self.job_slicer_estimate_time > 0:
-                calc = 5
-                if self.job_layer_count != 0:
-                    calc = max(5, min(self.job_slicer_estimate_time / self.job_layer_count, 60))
-                self.smart_capture_interval = int(calc)
+                time_calc = max(self.job_slicer_estimate_time / (self.approx_time_of_timelapse * self.timelapse_ips), 1) # minimum of 1 second
+                self.smart_capture_interval = int(time_calc)
             else:
-                self.smart_capture_interval = 15
+                self.smart_capture_interval = 1
         except requests.exceptions.ConnectionError:
             if self.is_online:
                 self.is_online = False
