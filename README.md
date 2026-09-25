@@ -1,4 +1,5 @@
 # Moonraker-docker-Timelapse
+[![Publish Docker Image](https://github.com/johann-gillieron/moonraker-docker-timelapse/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/johann-gillieron/moonraker-docker-timelapse/actions/workflows/docker-publish.yml)
 
 **Important Requirement:**  
 This tool requires a printer running [Moonraker](https://moonraker.readthedocs.io/en/latest/) to work with a Klipper printer.
