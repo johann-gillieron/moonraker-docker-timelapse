@@ -5,10 +5,10 @@ Based on the work of: aenima1337
 License: MIT
 Description: Automatically detects print status via Moonraker API and calculates ideal intervals for a perfect timelapses with a minimum of 1 seconds between frame and a timelapse of ~15s.
 """
-VERSION = "2.9.3"
+VERSION = "2.9.4"
 
 import requests, time, os, threading, subprocess, json, glob, re, numbers, uuid
-from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response
+from flask import Flask, render_template, send_from_directory, request, redirect, jsonify, Response, send_file
 from collections import deque
 from pathlib import Path
 
@@ -503,7 +503,10 @@ def thumb(pid, filename):
 @app.route('/video_file/<pid>/<path:filename>')
 def video_file(pid, filename):
     p = PRINTERS[pid]
-    return send_from_directory(p.video_dir, filename)
+    return send_file(
+        os.path.join(p.video_dir, filename),
+        conditional=True
+    )
 
 @app.route('/delete/<pid>/<path:filename>')
 def delete(pid, filename):

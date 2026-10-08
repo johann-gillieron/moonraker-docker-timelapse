@@ -9,5 +9,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy in the source code
 COPY app/ .
 
-#CMD ["python", "app.py"]
-CMD ["gunicorn", "--bind", "0.0.0.0:80", "app:app"]
+CMD ["gunicorn","--bind", "0.0.0.0:80","--workers", "2","--threads", "8","--worker-class", "gthread","--timeout", "300","app:app"]
